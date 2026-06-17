@@ -42,6 +42,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="SampleValidator.cs" />
     <Compile Include="SessionFileWriter.cs" />
+    <Compile Include="ServiceEvents.cs" />
     <Compile Include="WindTurbineService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

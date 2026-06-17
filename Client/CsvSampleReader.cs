@@ -40,6 +40,7 @@ namespace Client
 
                 ReadSampleResult result = new ReadSampleResult();
                 result.RowIndex = rowIndex;
+                result.OriginalLine = line;
 
                 try
                 {
@@ -136,7 +137,8 @@ namespace Client
                 GridFrequencyHz = ParseDouble(GetValue(values, "Grid frequency (Hz)"), "Grid frequency", rowIndex),
                 GeneratorRpm = ParseDouble(GetValue(values, "Generator RPM (RPM)"), "Generator RPM", rowIndex),
                 RowIndex = rowIndex,
-                TurbineId = turbineId
+                TurbineId = turbineId,
+                OriginalLine = line
             };
         }
 

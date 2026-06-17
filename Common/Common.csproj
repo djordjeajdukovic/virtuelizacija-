@@ -36,6 +36,7 @@
     <Reference Include="System.ServiceModel" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BatchResult.cs" />
     <Compile Include="DataFormatFault.cs" />
     <Compile Include="IWindTurbineService.cs" />
     <Compile Include="SessionMeta.cs" />

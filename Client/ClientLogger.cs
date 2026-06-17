@@ -25,7 +25,18 @@ namespace Client
 
         public void Log(int rowIndex, string message)
         {
+            Log(rowIndex, message, null);
+        }
+
+        public void Log(int rowIndex, string message, string originalLine)
+        {
             writer.WriteLine(DateTime.Now.ToString("o", CultureInfo.InvariantCulture) + " | Row " + rowIndex + " | " + message);
+
+            if (!string.IsNullOrWhiteSpace(originalLine))
+            {
+                writer.WriteLine("Original: " + originalLine);
+            }
+
             writer.Flush();
         }
 

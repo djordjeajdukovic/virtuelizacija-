@@ -18,6 +18,11 @@ namespace Common
         [OperationContract]
         [FaultContract(typeof(DataFormatFault))]
         [FaultContract(typeof(ValidationFault))]
+        BatchResult PushBatch(WindTurbineSample[] samples);
+
+        [OperationContract]
+        [FaultContract(typeof(DataFormatFault))]
+        [FaultContract(typeof(ValidationFault))]
         void EndSession();
     }
 }

@@ -41,5 +41,8 @@ namespace Common
 
         [DataMember]
         public string TurbineId { get; set; }
+
+        [DataMember]
+        public string OriginalLine { get; set; }
     }
 }

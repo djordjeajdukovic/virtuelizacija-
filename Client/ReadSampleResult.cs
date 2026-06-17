@@ -6,7 +6,8 @@ namespace Client
     {
         public bool IsValid { get; set; }
         public int RowIndex { get; set; }
-        public string ErrorMessage { get; set; }
         public WindTurbineSample Sample { get; set; }
+        public string ErrorMessage { get; set; }
+        public string OriginalLine { get; set; }
     }
 }

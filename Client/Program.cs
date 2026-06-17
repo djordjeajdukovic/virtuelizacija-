@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.ServiceModel;
@@ -13,6 +14,7 @@ namespace Client
             string inputDirectory = GetPath(ConfigurationManager.AppSettings["InputDirectory"], "Input");
             string logPath = GetPath(ConfigurationManager.AppSettings["ClientLogPath"], @"Logs\client_rejects.txt");
             int maxRowsToSend = ReadIntSetting("MaxRowsToSend", 100);
+            int batchSize = ReadIntSetting("BatchSize", 10);
 
             Directory.CreateDirectory(inputDirectory);
 
@@ -28,10 +30,14 @@ namespace Client
             Console.WriteLine("Izabran fajl: " + Path.GetFileName(filePath));
             Console.WriteLine("TurbineId: " + turbineId);
             Console.WriteLine("Max redova za slanje: " + maxRowsToSend);
+            Console.WriteLine("Velicina bloka: " + batchSize);
             Console.WriteLine();
 
-            int sent = 0;
-            int rejected = 0;
+            int sentToServer = 0;
+            int accepted = 0;
+            int clientRejected = 0;
+            int serverRejected = 0;
+            int batchNumber = 0;
 
             using (ClientLogger logger = new ClientLogger(logPath))
             using (CsvSampleReader reader = new CsvSampleReader(filePath, turbineId))
@@ -49,47 +55,42 @@ namespace Client
                     });
 
                     Console.WriteLine("[START] Sesija je pokrenuta.");
-                    Console.WriteLine("[DATA] Slanje uzoraka je u toku.");
+                    Console.WriteLine("[DATA] Slanje blokova je u toku.");
+
+                    List<WindTurbineSample> batch = new List<WindTurbineSample>();
+                    int prepared = 0;
 
                     foreach (ReadSampleResult result in reader.ReadSamples())
                     {
-                        if (sent >= maxRowsToSend)
+                        if (prepared >= maxRowsToSend)
                         {
                             break;
                         }
 
                         if (!result.IsValid)
                         {
-                            rejected++;
-                            logger.Log(result.RowIndex, result.ErrorMessage);
-                            Console.WriteLine("[REJECT] Red " + result.RowIndex + " | " + result.ErrorMessage);
+                            clientRejected++;
+                            logger.Log(result.RowIndex, result.ErrorMessage, result.OriginalLine);
+                            Console.WriteLine("[CLIENT REJECT] Red " + result.RowIndex + " | " + result.ErrorMessage);
                             continue;
                         }
 
-                        try
-                        {
-                            proxy.Service.PushSample(result.Sample);
-                            sent++;
+                        batch.Add(result.Sample);
+                        prepared++;
 
-                            Console.WriteLine("[" + sent + "/" + maxRowsToSend + "] PushSample: ACK | Red " + result.Sample.RowIndex);
-
-                        }
-                        catch (FaultException<DataFormatFault> ex)
+                        if (batch.Count == batchSize)
                         {
-                            rejected++;
-                            logger.Log(result.RowIndex, ex.Detail.Message);
-                            Console.WriteLine("[" + sent + "/" + maxRowsToSend + "] PushSample: NACK | " + ex.Detail.Message);
-                        }
-                        catch (FaultException<ValidationFault> ex)
-                        {
-                            rejected++;
-                            logger.Log(result.RowIndex, ex.Detail.Message);
-                            Console.WriteLine("[" + sent + "/" + maxRowsToSend + "] PushSample: NACK | " + ex.Detail.Message);
+                            SendBatch(proxy, batch, ref batchNumber, ref sentToServer, ref accepted, ref serverRejected);
+                            batch.Clear();
                         }
                     }
 
-                    proxy.Service.EndSession();
+                    if (batch.Count > 0)
+                    {
+                        SendBatch(proxy, batch, ref batchNumber, ref sentToServer, ref accepted, ref serverRejected);
+                    }
 
+                    proxy.Service.EndSession();
                     Console.WriteLine("[END] Prenos je zavrsen.");
                 }
                 catch (FaultException<DataFormatFault> ex)
@@ -107,11 +108,27 @@ namespace Client
             }
 
             Console.WriteLine();
-            Console.WriteLine("Poslato redova: " + sent);
-            Console.WriteLine("Odbijeno redova: " + rejected);
+            Console.WriteLine("Poslato serveru: " + sentToServer);
+            Console.WriteLine("Prihvaceno na serveru: " + accepted);
+            Console.WriteLine("Odbijeno na klijentu: " + clientRejected);
+            Console.WriteLine("Odbijeno na serveru: " + serverRejected);
             Console.WriteLine("Client log: " + logPath);
             Console.WriteLine("Pritisni ENTER za kraj.");
             Console.ReadLine();
+        }
+
+        private static void SendBatch(WcfServiceProxy proxy, List<WindTurbineSample> batch, ref int batchNumber, ref int sentToServer, ref int accepted, ref int rejected)
+        {
+            BatchResult result = proxy.Service.PushBatch(batch.ToArray());
+            batchNumber = result.BatchNumber;
+            sentToServer += result.ReceivedCount;
+            accepted += result.AcceptedCount;
+            rejected += result.RejectedCount;
+
+            Console.WriteLine("[BATCH " + result.BatchNumber + "] " + result.Message +
+                " | primljeno: " + result.ReceivedCount +
+                " | prihvaceno: " + result.AcceptedCount +
+                " | odbijeno: " + result.RejectedCount);
         }
 
         private static string ChooseFile(string inputDirectory)
@@ -126,6 +143,7 @@ namespace Client
                 return File.Exists(path) ? path : null;
             }
 
+            Array.Sort(files);
             Console.WriteLine("Izaberi CSV fajl:");
 
             for (int i = 0; i < files.Length; i++)
@@ -153,14 +171,14 @@ namespace Client
                 return path;
             }
 
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path);
+            return Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path));
         }
 
         private static int ReadIntSetting(string key, int defaultValue)
         {
             string value = ConfigurationManager.AppSettings[key];
-
             int parsed;
+
             if (int.TryParse(value, out parsed) && parsed > 0)
             {
                 return parsed;
@@ -172,15 +190,28 @@ namespace Client
         private static string GetTurbineIdFromFileName(string filePath)
         {
             string name = Path.GetFileNameWithoutExtension(filePath);
+            string marker = "Kelmarsh_";
+            int index = name.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
 
-            if (name.Contains("Kelmarsh_1")) return "Kelmarsh_1";
-            if (name.Contains("Kelmarsh_2")) return "Kelmarsh_2";
-            if (name.Contains("Kelmarsh_3")) return "Kelmarsh_3";
-            if (name.Contains("Kelmarsh_4")) return "Kelmarsh_4";
-            if (name.Contains("Kelmarsh_5")) return "Kelmarsh_5";
-            if (name.Contains("Kelmarsh_6")) return "Kelmarsh_6";
+            if (index < 0)
+            {
+                return name;
+            }
 
-            return name;
+            int start = index + marker.Length;
+            int end = start;
+
+            while (end < name.Length && char.IsDigit(name[end]))
+            {
+                end++;
+            }
+
+            if (end == start)
+            {
+                return name;
+            }
+
+            return marker + name.Substring(start, end - start);
         }
     }
 }

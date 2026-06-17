@@ -45,11 +45,13 @@ namespace Service
             if (newSampleFile)
             {
                 sampleWriter.WriteLine("Timestamp,WindSpeed,WindDirection,NacellePosition,PowerKW,PotentialPowerDefaultKW,PowerFactor,ReactivePowerKvar,GridFrequencyHz,GeneratorRpm,RowIndex,TurbineId");
+                sampleWriter.Flush();
             }
 
             if (newRejectFile)
             {
-                rejectWriter.WriteLine("Time,RowIndex,Reason");
+                rejectWriter.WriteLine("Time,RowIndex,Reason,OriginalLine");
+                rejectWriter.Flush();
             }
         }
 
@@ -67,16 +69,17 @@ namespace Service
                 ToText(sample.GridFrequencyHz),
                 ToText(sample.GeneratorRpm),
                 sample.RowIndex.ToString(CultureInfo.InvariantCulture),
-                sample.TurbineId));
+                Escape(sample.TurbineId)));
             sampleWriter.Flush();
         }
 
-        public void WriteReject(int rowIndex, string reason)
+        public void WriteReject(int rowIndex, string reason, string originalLine)
         {
             rejectWriter.WriteLine(string.Join(",",
                 DateTime.Now.ToString("o", CultureInfo.InvariantCulture),
                 rowIndex.ToString(CultureInfo.InvariantCulture),
-                Escape(reason)));
+                Escape(reason),
+                Escape(originalLine)));
             rejectWriter.Flush();
         }
 
@@ -116,7 +119,7 @@ namespace Service
                 return string.Empty;
             }
 
-            if (text.Contains(",") || text.Contains("\"") || text.Contains("\n"))
+            if (text.Contains(",") || text.Contains("\"") || text.Contains("\n") || text.Contains("\r"))
             {
                 return "\"" + text.Replace("\"", "\"\"") + "\"";
             }
